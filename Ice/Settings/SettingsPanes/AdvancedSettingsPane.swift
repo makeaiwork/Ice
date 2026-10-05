@@ -30,7 +30,7 @@ struct AdvancedSettingsPane: View {
         IceForm {
             IceSection {
                 if #unavailable(macOS 27.0) { hideApplicationMenus }
-                showSectionDividers
+                if #unavailable(macOS 27.0) { showSectionDividers }
                 showAllSectionsOnUserDrag
                 showContextMenuOnRightClick
             }

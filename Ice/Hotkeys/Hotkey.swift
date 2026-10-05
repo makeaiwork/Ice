@@ -36,6 +36,12 @@ final class Hotkey: ObservableObject {
 
     func enable() {
         disable()
+        if #available(macOS 27.0, *) {
+            switch action {
+            case .enableIceBar, .toggleApplicationMenus, .showSectionDividers: return
+            default: break
+            }
+        }
         listener = Listener(hotkey: self, eventKind: .keyDown, appState: appState)
     }
 

@@ -187,6 +187,7 @@ final class AppState: ObservableObject {
         if #available(macOS 27.0, *) {
             settingsManager.performSetup()
             nativeMenuBar.performSetup()
+            appearanceManager.performSetup()
         } else {
             menuBarManager.performSetup()
             appearanceManager.performSetup()

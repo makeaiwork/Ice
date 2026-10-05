@@ -273,7 +273,16 @@ extension WindowInfo {
 extension WindowInfo {
     /// Returns the menu bar window for the given display.
     static func getMenuBarWindow(from windows: [WindowInfo], for display: CGDirectDisplayID) -> WindowInfo? {
-        windows.first(where: Predicates.menuBarWindow(for: display))
+        if #available(macOS 27.0, *) {
+            let bounds = CGDisplayBounds(display)
+            if let native = windows.first(where: {
+                $0.isOnScreen && $0.alpha > 0 &&
+                $0.owningApplication?.bundleIdentifier == "com.apple.MenuBarAgent" &&
+                $0.frame.width >= bounds.width * 0.9 && (16...80).contains($0.frame.height) &&
+                abs($0.frame.minX - bounds.minX) < 2 && abs($0.frame.minY - bounds.minY) < 2
+            }) { return native }
+        }
+        return windows.first(where: Predicates.menuBarWindow(for: display))
     }
 
     /// Returns the menu bar window for the given display.

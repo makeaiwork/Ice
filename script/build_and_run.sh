@@ -8,12 +8,18 @@ case "$MODE" in
 esac
 # Set ICE_SIGN_IDENTITY to a Developer ID identity for a stable, trusted local signature.
 SIGN_IDENTITY="${ICE_SIGN_IDENTITY:--}"
-xcodebuild -project "$ROOT_DIR/Ice.xcodeproj" -scheme Ice -configuration Debug \
+CONFIGURATION="${ICE_BUILD_CONFIGURATION:-Debug}"
+INJECT_DEBUG_ENTITLEMENTS=YES
+if [[ "$CONFIGURATION" == Release ]]; then INJECT_DEBUG_ENTITLEMENTS=NO; fi
+SIGN_FLAGS=()
+if [[ "$SIGN_IDENTITY" != - ]]; then SIGN_FLAGS+=("OTHER_CODE_SIGN_FLAGS=--timestamp"); fi
+xcodebuild -project "$ROOT_DIR/Ice.xcodeproj" -scheme Ice -configuration "$CONFIGURATION" \
     -derivedDataPath "$ROOT_DIR/build/native-derived" \
     -clonedSourcePackagesDirPath "$ROOT_DIR/build/SourcePackages" \
     CODE_SIGN_IDENTITY="$SIGN_IDENTITY" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
-    ENABLE_HARDENED_RUNTIME=YES build
-APP_PATH="$ROOT_DIR/build/native-derived/Build/Products/Debug/Ice.app"
+    ENABLE_HARDENED_RUNTIME=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS="$INJECT_DEBUG_ENTITLEMENTS" \
+    ${SIGN_FLAGS[@]+"${SIGN_FLAGS[@]}"} build
+APP_PATH="$ROOT_DIR/build/native-derived/Build/Products/$CONFIGURATION/Ice.app"
 if [[ "$MODE" == --build-only ]]; then
     echo "$APP_PATH"
     exit 0

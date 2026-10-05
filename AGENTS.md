@@ -13,11 +13,13 @@ Ice is a macOS 14+ menu bar manager written in Swift using SwiftUI and AppKit. `
 
 ## Build, Test, and Development Commands
 
-Use a recent Xcode compatible with the project, which was last upgraded with Xcode 16.4. The target uses Swift 5 language mode.
+Use a recent Xcode compatible with the project. The target uses Swift 5 language mode.
 
 - `open Ice.xcodeproj`: open Xcode; select the `Ice` scheme and run with Command-R. Configure your local development signing team if needed.
 - `xcodebuild -resolvePackageDependencies -project Ice.xcodeproj -scheme Ice`: resolve package dependencies.
 - `xcodebuild -project Ice.xcodeproj -scheme Ice -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO build`: compile without signing for a local build check.
+- `./script/test_native_menu_bar.sh` and `./script/test_build_and_run.sh`: check visibility, assertion lifecycle, and Bash compatibility.
+- `./script/build_and_run.sh --build-only`: build locally; use `ICE_BUILD_CONFIGURATION=Release` and `ICE_SIGN_IDENTITY` for signed release builds.
 - `swiftlint lint --strict`: run the lint gate used by CI. Install SwiftLint separately; Xcode’s build phase warns if it is missing.
 
 ## Coding Style & Naming Conventions
@@ -26,7 +28,7 @@ Follow `.swiftlint.yml`: four-space indentation, no tabs, trailing commas in mul
 
 ## Testing Guidelines
 
-This checkout has no automated test target, test framework, or coverage threshold. Validate changes with a build, strict lint, and focused manual checks. For affected features, exercise hiding/rehiding, item arrangement, hotkeys, appearance, and settings persistence after relaunch. Check Accessibility permission and Screen Recording permission where applicable. Record macOS version, reproduction steps, and results in the PR.
+There is no XCTest target or coverage threshold. `Tests/NativeMenuBarPolicyTests.swift` contains standalone checks for the macOS 27 path. Validate changes with a build, strict lint, and focused manual checks. For affected features, exercise hiding/rehiding, item arrangement, hotkeys, appearance, and settings persistence after relaunch. Check Accessibility permission and Screen Recording permission where applicable. Record macOS version, reproduction steps, and results in the PR.
 
 ## Commit & Pull Request Guidelines
 

@@ -4,25 +4,46 @@
 //
 
 import Foundation
-import CoreGraphics
 
-/// Pure geometry and timing rules shared by the macOS 27 implementation/tests.
-enum NativeMenuBarPolicy {
-    /// A spacer must fit in the region to its left; macOS discards oversized
-    /// items. Reserve room for Apple's overflow control. Coordinates are global.
-    static func hidingLength(anchorX: CGFloat, display: CGRect, menuMaxX: CGFloat, notch: ClosedRange<CGFloat>?) -> CGFloat? {
-        guard [anchorX, display.minX, display.maxX, menuMaxX].allSatisfy(\.isFinite),
-              anchorX > display.minX, anchorX <= display.maxX else { return nil }
-        let menuEnd = max(display.minX, menuMaxX)
-        let length: CGFloat
-        if let notch, anchorX >= notch.upperBound {
-            let rightGap = anchorX - notch.upperBound
-            let leftSpace = notch.lowerBound - menuEnd - 32
-            length = leftSpace > rightGap ? leftSpace : rightGap - 32
-        } else {
-            length = anchorX - menuEnd - 32
+enum NativeMenuBarSection: String, CaseIterable, Codable {
+    case visible, hidden, alwaysHidden
+
+    var title: String {
+        switch self {
+        case .visible: "Visible"
+        case .hidden: "Hidden"
+        case .alwaysHidden: "Always-Hidden"
         }
-        return length >= 32 ? length : nil
+    }
+}
+
+enum NativeMenuBarPolicy {
+    static func sectionOnlyDrop(from source: NativeMenuBarSection, to destination: NativeMenuBarSection,
+                                sourceRunning: Bool, targetRunning: Bool) -> Bool {
+        source != destination && (!sourceRunning || !targetRunning)
+    }
+
+    static func canAssign(_ bundle: String, ownBundle: String) -> Bool {
+        !bundle.isEmpty && bundle != ownBundle && ![
+            "com.apple.MenuBarAgent", "com.apple.controlcenter", "com.apple.systemuiserver",
+            "com.apple.SystemUIServer", "com.apple.TextInputMenuAgent",
+        ].contains(bundle)
+    }
+
+    /// Recognized applications are hidden only through explicit membership.
+    /// The native API may also hide items whose application identity is unknown.
+    static func hiddenBundles(
+        assignments: [String: NativeMenuBarSection], running: Set<String>, ownBundle: String,
+        hidden: Bool, alwaysHidden: Bool, alwaysHiddenEnabled: Bool
+    ) -> Set<String> {
+        Set(assignments.compactMap { bundle, section in
+            guard running.contains(bundle), canAssign(bundle, ownBundle: ownBundle) else { return nil }
+            switch section {
+            case .visible: return nil
+            case .hidden: return hidden ? bundle : nil
+            case .alwaysHidden: return alwaysHiddenEnabled && alwaysHidden ? bundle : nil
+            }
+        })
     }
 
     static func isInputIdle(buttons: Int, modifiers: UInt) -> Bool {

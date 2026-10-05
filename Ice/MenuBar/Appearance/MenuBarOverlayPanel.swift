@@ -60,6 +60,13 @@ final class MenuBarOverlayPanel: NSPanel {
     /// Flags representing the components of the panel currently in need of an update.
     @Published private(set) var updateFlags = Set<UpdateFlag>()
 
+    private let nativeAccessibility = MenuBarAccessibility()
+    private var nativeUpdateTask: Task<Void, Never>?
+    private var lastWallpaperUpdate: TimeInterval = 0
+    private var nativeWallpaperURL: URL?
+    private var nativeDiagnosticState = ""
+    fileprivate var nativeItemFrames = [CGRect]()
+
     /// The frame of the application menu.
     @Published private(set) var applicationMenuFrame: CGRect?
 
@@ -99,6 +106,10 @@ final class MenuBarOverlayPanel: NSPanel {
     }
 
     private func configureCancellables() {
+        if #available(macOS 27.0, *) {
+            configureNativeAppearance()
+            return
+        }
         var c = Set<AnyCancellable>()
 
         // Show the panel on the active space.
@@ -244,6 +255,112 @@ final class MenuBarOverlayPanel: NSPanel {
         }
 
         cancellables = c
+    }
+
+    /// The native host supplies one window for the entire bar. Read its live AX
+    /// geometry off the main thread instead of polling the legacy item windows.
+    private func configureNativeAppearance() {
+        Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+            .sink { [weak self] _ in self?.updateNativeAppearance() }
+            .store(in: &cancellables)
+        if let appState {
+            appState.nativeMenuBar.$isHidden.combineLatest(appState.nativeMenuBar.$isAlwaysHidden)
+                .removeDuplicates { $0.0 == $1.0 && $0.1 == $1.1 }
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    // Use a full bar while the native host reflows its items.
+                    self?.nativeItemFrames = []
+                    self?.contentView?.needsDisplay = true
+                    self?.needsShow = true
+                }
+                .store(in: &cancellables)
+        }
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didActivateApplicationNotification)
+            .merge(with: NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.activeSpaceDidChangeNotification))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                if notification.name == NSWorkspace.activeSpaceDidChangeNotification { self?.lastWallpaperUpdate = 0 }
+                self?.needsShow = true
+            }
+            .store(in: &cancellables)
+        DistributedNotificationCenter.default().publisher(for: DistributedNotificationCenter.interfaceThemeChangedNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.lastWallpaperUpdate = 0
+                self?.needsShow = true
+            }
+            .store(in: &cancellables)
+        $needsShow.filter { $0 }
+            .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateNativeAppearance() }
+            .store(in: &cancellables)
+    }
+
+    private func updateNativeAppearance() {
+        guard nativeUpdateTask == nil, let appState, !appState.isPreview,
+              appState.appearanceManager.overlayPanels.contains(self) else { return }
+        let options = NSApp.currentSystemPresentationOptions
+        let dragging = NSEvent.modifierFlags.contains(.command) && NSEvent.pressedMouseButtons != 0
+        guard !appState.isActiveSpaceFullscreen, !options.contains(.hideMenuBar),
+              !options.contains(.autoHideMenuBar), Defaults.globalDomain["_HIHideMenuBar"] as? Bool != true,
+              !dragging else {
+            orderOut(nil)
+            return
+        }
+        let windows = WindowInfo.getOnScreenWindows()
+        guard let bar = WindowInfo.getMenuBarWindow(from: windows, for: owningScreen.displayID) else {
+            if nativeDiagnosticState != "missing" {
+                nativeDiagnosticState = "missing"
+                Logger.overlayPanel.debug("Native appearance waiting for menu bar")
+            }
+            orderOut(nil)
+            return
+        }
+        let display = CGDisplayBounds(owningScreen.displayID)
+        let agents = NSWorkspace.shared.runningApplications.filter { $0.bundleIdentifier == "com.apple.MenuBarAgent" }
+        nativeUpdateTask = Task { [weak self] in
+            guard let self else { return }
+            defer { nativeUpdateTask = nil }
+            let menuOwner = NSWorkspace.shared.menuBarOwningApplication ?? NSWorkspace.shared.frontmostApplication
+            let geometry = await nativeAccessibility.appearanceFrames(display: display, agents: agents, menuOwnerPID: menuOwner?.processIdentifier)
+            guard !Task.isCancelled, appState.appearanceManager.overlayPanels.contains(self) else { return }
+            if applicationMenuFrame != geometry.application { applicationMenuFrame = geometry.application }
+            if nativeItemFrames != geometry.items {
+                nativeItemFrames = geometry.items
+                contentView?.needsDisplay = true
+            }
+            let frame = CGRect(x: bar.frame.minX,
+                               y: owningScreen.frame.maxY - (bar.frame.maxY - display.minY) - 5,
+                               width: bar.frame.width, height: bar.frame.height + 5)
+            if self.frame != frame { setFrame(frame, display: false) }
+            let wallpaperURL = NSWorkspace.shared.desktopImageURL(for: owningScreen)
+            if nativeWallpaperURL != wallpaperURL {
+                nativeWallpaperURL = wallpaperURL
+                lastWallpaperUpdate = 0
+            }
+            let now = ProcessInfo.processInfo.systemUptime
+            if appState.appearanceManager.configuration.shapeKind != .none,
+               now - lastWallpaperUpdate > 30, ScreenCapture.cachedCheckPermissions() {
+                lastWallpaperUpdate = now
+                desktopWallpaper = await ScreenCapture.captureWallpaperStrip(bounds: bar.frame, scale: owningScreen.backingScaleFactor)
+                guard !Task.isCancelled, appState.appearanceManager.overlayPanels.contains(self) else { return }
+            }
+            // Masking requires fresh geometry; unknown bounds fall back to a full bar.
+            alphaValue = 1
+            if !isVisible { orderFrontRegardless() }
+            let state = "frame=\(frame), menu=\(String(describing: applicationMenuFrame)), items=\(nativeItemFrames.count), wallpaper=\(desktopWallpaper != nil), captureAllowed=\(CGPreflightScreenCaptureAccess()), shape=\(appState.appearanceManager.configuration.shapeKind), visible=\(isVisible)"
+            if nativeDiagnosticState != state {
+                nativeDiagnosticState = state
+                Logger.overlayPanel.info("Native appearance: \(state)")
+            }
+        }
+    }
+
+    override func close() {
+        nativeUpdateTask?.cancel()
+        nativeUpdateTask = nil
+        cancellables.removeAll()
+        super.close()
     }
 
     /// Inserts the given update flag into the panel's current list of update flags.
@@ -570,12 +687,14 @@ private final class MenuBarOverlayPanelContentView: NSView {
             return CGRect(x: rect.minX, y: rect.minY, width: maxX, height: rect.height)
         }()
         let trailingPathBounds: CGRect = {
-            let items = MenuBarItem.getMenuBarItems(on: screen.displayID, onScreenOnly: true, activeSpaceOnly: false)
-            guard !items.isEmpty else {
-                return .zero
-            }
-            let totalWidth = items.reduce(into: 0) { width, item in
-                width += item.frame.width
+            let totalWidth: CGFloat
+            if #available(macOS 27.0, *) {
+                guard let firstX = overlayPanel?.nativeItemFrames.map(\.minX).min() else { return .zero }
+                totalWidth = CGDisplayBounds(screen.displayID).maxX - firstX
+            } else {
+                let items = MenuBarItem.getMenuBarItems(on: screen.displayID, onScreenOnly: true, activeSpaceOnly: false)
+                guard !items.isEmpty else { return .zero }
+                totalWidth = items.reduce(0) { $0 + $1.frame.width }
             }
             var position = rect.maxX - totalWidth
             if shouldInset {

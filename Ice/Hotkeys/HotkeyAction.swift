@@ -25,8 +25,6 @@ enum HotkeyAction: String, Codable, CaseIterable {
             case .searchMenuBarItems:
                 appState.navigationState.settingsNavigationIdentifier = .menuBarLayout
                 appState.appDelegate?.openSettingsWindow()
-            case .showSectionDividers:
-                appState.settingsManager.advancedSettingsManager.showSectionDividers.toggle()
             default: break
             }
             return

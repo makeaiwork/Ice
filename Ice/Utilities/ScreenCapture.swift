@@ -10,6 +10,9 @@ import ScreenCaptureKit
 enum ScreenCapture {
     /// Returns a Boolean value that indicates whether the app has been granted screen capture permissions.
     static func checkPermissions() -> Bool {
+        if #available(macOS 27.0, *) {
+            return CGPreflightScreenCaptureAccess()
+        }
         for item in MenuBarItem.getMenuBarItems(onScreenOnly: false, activeSpaceOnly: true) {
             // Don't check items owned by Ice.
             if item.owningApplication == .current {
@@ -51,6 +54,39 @@ enum ScreenCapture {
             SCShareableContent.getWithCompletionHandler { _, _ in }
         } else {
             CGRequestScreenCaptureAccess()
+        }
+    }
+
+    /// Captures only the wallpaper strip used to mask the menu bar's shape.
+    /// Unlike the old WindowServer capture entry point, this works with the
+    /// ScreenCaptureKit-backed desktop on current macOS.
+    @MainActor
+    static func captureWallpaperStrip(bounds: CGRect, scale: CGFloat) async -> CGImage? {
+        guard CGPreflightScreenCaptureAccess() else { return nil }
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            let desktopLevel = Int(CGWindowLevelForKey(.desktopWindow))
+            guard let wallpaper = content.windows.first(where: {
+                let owner = $0.owningApplication?.bundleIdentifier ?? ""
+                let isWallpaper = $0.windowLayer == desktopLevel ||
+                    owner == "com.apple.wallpaper.agent" ||
+                    (owner == "com.apple.dock" && $0.title?.hasPrefix("Wallpaper") == true)
+                return isWallpaper && $0.frame.contains(bounds)
+            }) else {
+                Logger(category: "MenuBarOverlayPanel").debug("Wallpaper window unavailable for appearance mask")
+                return nil
+            }
+            let configuration = SCStreamConfiguration()
+            configuration.sourceRect = bounds.offsetBy(dx: -wallpaper.frame.minX, dy: -wallpaper.frame.minY)
+            configuration.width = Int(bounds.width * scale)
+            configuration.height = Int(bounds.height * scale)
+            configuration.showsCursor = false
+            configuration.ignoreShadowsSingleWindow = true
+            let filter = SCContentFilter(desktopIndependentWindow: wallpaper)
+            return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+        } catch {
+            Logger(category: "MenuBarOverlayPanel").debug("Wallpaper capture unavailable: \(error.localizedDescription)")
+            return nil
         }
     }
 
