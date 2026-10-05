@@ -18,6 +18,19 @@ enum HotkeyAction: String, Codable, CaseIterable {
 
     @MainActor
     func perform(appState: AppState) async {
+        if #available(macOS 27.0, *) {
+            switch self {
+            case .toggleHiddenSection: appState.nativeMenuBar.toggle()
+            case .toggleAlwaysHiddenSection: appState.nativeMenuBar.toggle(alwaysHidden: true)
+            case .searchMenuBarItems:
+                appState.navigationState.settingsNavigationIdentifier = .menuBarLayout
+                appState.appDelegate?.openSettingsWindow()
+            case .showSectionDividers:
+                appState.settingsManager.advancedSettingsManager.showSectionDividers.toggle()
+            default: break
+            }
+            return
+        }
         switch self {
         case .toggleHiddenSection:
             guard let section = appState.menuBarManager.section(withName: .hidden) else {

@@ -22,9 +22,11 @@ struct HotkeysSettingsPane: View {
                 hotkeyRecorder(forAction: .searchMenuBarItems)
             }
             IceSection("Other") {
-                hotkeyRecorder(forAction: .enableIceBar)
+                if #unavailable(macOS 27.0) {
+                    hotkeyRecorder(forAction: .enableIceBar)
+                    hotkeyRecorder(forAction: .toggleApplicationMenus)
+                }
                 hotkeyRecorder(forAction: .showSectionDividers)
-                hotkeyRecorder(forAction: .toggleApplicationMenus)
             }
         }
     }
@@ -51,9 +53,16 @@ struct HotkeysSettingsPane: View {
         }
     }
 
+    private func isSectionEnabled(_ name: MenuBarSection.Name) -> Bool {
+        if #available(macOS 27.0, *) {
+            return name == .hidden || (name == .alwaysHidden && appState.settingsManager.advancedSettingsManager.enableAlwaysHiddenSection)
+        }
+        return appState.menuBarManager.section(withName: name)?.isEnabled == true
+    }
+
     @ViewBuilder
     private func hotkeyRecorder(forSection name: MenuBarSection.Name) -> some View {
-        if appState.menuBarManager.section(withName: name)?.isEnabled == true {
+        if isSectionEnabled(name) {
             if case .hidden = name {
                 hotkeyRecorder(forAction: .toggleHiddenSection)
             } else if case .alwaysHidden = name {

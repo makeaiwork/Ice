@@ -29,7 +29,7 @@ struct AdvancedSettingsPane: View {
     var body: some View {
         IceForm {
             IceSection {
-                hideApplicationMenus
+                if #unavailable(macOS 27.0) { hideApplicationMenus }
                 showSectionDividers
                 showAllSectionsOnUserDrag
                 showContextMenuOnRightClick
@@ -40,7 +40,7 @@ struct AdvancedSettingsPane: View {
             }
             IceSection {
                 showOnHoverDelaySlider
-                tempShowIntervalSlider
+                if #unavailable(macOS 27.0) { tempShowIntervalSlider }
             }
             IceSection("Permissions") {
                 allPermissions
@@ -105,7 +105,7 @@ struct AdvancedSettingsPane: View {
             )
         } label: {
             Text("Show on hover delay")
-                .frame(minHeight: .compactSliderMinHeight)
+                .frame(minHeight: 24)
                 .frame(minWidth: maxSliderLabelWidth, alignment: .leading)
                 .onFrameChange { frame in
                     maxSliderLabelWidth = max(maxSliderLabelWidth, frame.width)
@@ -125,7 +125,7 @@ struct AdvancedSettingsPane: View {
             )
         } label: {
             Text("Temporarily shown item delay")
-                .frame(minHeight: .compactSliderMinHeight)
+                .frame(minHeight: 24)
                 .frame(minWidth: maxSliderLabelWidth, alignment: .leading)
                 .onFrameChange { frame in
                     maxSliderLabelWidth = max(maxSliderLabelWidth, frame.width)

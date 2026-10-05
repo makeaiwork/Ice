@@ -3,7 +3,6 @@
 //  Ice
 //
 
-import CompactSlider
 import SwiftUI
 
 struct IceSlider<Value: BinaryFloatingPoint, ValueLabel: View, ValueLabelSelectability: TextSelectability>: View {
@@ -45,15 +44,19 @@ struct IceSlider<Value: BinaryFloatingPoint, ValueLabel: View, ValueLabelSelecta
     }
 
     var body: some View {
-        CompactSlider(
-            value: value,
-            in: bounds,
-            step: step,
-            handleVisibility: .hovering(width: 1)
-        ) {
+        HStack {
+            if step > 0 {
+                Slider(value: doubleValue, in: Double(bounds.lowerBound)...Double(bounds.upperBound), step: Double(step))
+            } else {
+                Slider(value: doubleValue, in: Double(bounds.lowerBound)...Double(bounds.upperBound))
+            }
             valueLabel
                 .textSelection(valueLabelSelectability)
+                .monospacedDigit()
         }
-        .compactSliderDisabledHapticFeedback(true)
+    }
+
+    private var doubleValue: Binding<Double> {
+        Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Value($0) })
     }
 }

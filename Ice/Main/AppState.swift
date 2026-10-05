@@ -24,6 +24,8 @@ final class AppState: ObservableObject {
     /// Manager for the state of the menu bar.
     private(set) lazy var menuBarManager = MenuBarManager(appState: self)
 
+    private(set) lazy var nativeMenuBar = NativeMenuBarController(appState: self)
+
     /// Manager for app permissions.
     private(set) lazy var permissionsManager = PermissionsManager(appState: self)
 
@@ -145,6 +147,7 @@ final class AppState: ObservableObject {
             else {
                 return
             }
+            if #available(macOS 27.0, *) { return }
             Task.detached {
                 if ScreenCapture.cachedCheckPermissions(reset: true) {
                     await self.imageCache.updateCacheWithoutChecks(sections: MenuBarSection.Name.allCases)
@@ -181,12 +184,17 @@ final class AppState: ObservableObject {
     func performSetup() {
         configureCancellables()
         permissionsManager.stopAllChecks()
-        menuBarManager.performSetup()
-        appearanceManager.performSetup()
-        eventManager.performSetup()
-        settingsManager.performSetup()
-        itemManager.performSetup()
-        imageCache.performSetup()
+        if #available(macOS 27.0, *) {
+            settingsManager.performSetup()
+            nativeMenuBar.performSetup()
+        } else {
+            menuBarManager.performSetup()
+            appearanceManager.performSetup()
+            eventManager.performSetup()
+            settingsManager.performSetup()
+            itemManager.performSetup()
+            imageCache.performSetup()
+        }
         updatesManager.performSetup()
         userNotificationManager.performSetup()
     }

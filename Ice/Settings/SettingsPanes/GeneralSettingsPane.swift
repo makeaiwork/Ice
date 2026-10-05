@@ -60,8 +60,8 @@ struct GeneralSettingsPane: View {
             IceSection {
                 iceIconOptions
             }
-            IceSection {
-                iceBarOptions
+            if #unavailable(macOS 27.0) {
+                IceSection { iceBarOptions }
             }
             IceSection {
                 showOnClick
@@ -71,8 +71,8 @@ struct GeneralSettingsPane: View {
             IceSection {
                 autoRehideOptions
             }
-            IceSection {
-                spacingOptions
+            if #unavailable(macOS 27.0) {
+                IceSection { spacingOptions }
             }
         }
         .alert(isPresented: $isPresentingError, error: presentedError) {

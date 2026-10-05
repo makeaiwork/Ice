@@ -9,7 +9,9 @@ struct MenuBarLayoutSettingsPane: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
-        if !ScreenCapture.cachedCheckPermissions() {
+        if #available(macOS 27.0, *) {
+            NativeMenuBarLayoutView(controller: appState.nativeMenuBar)
+        } else if !ScreenCapture.cachedCheckPermissions() {
             missingScreenRecordingPermission
         } else if appState.menuBarManager.isMenuBarHiddenBySystemUserDefaults {
             cannotArrange

@@ -10,7 +10,7 @@ import CoreGraphics
 typealias CGSConnectionID = Int32
 typealias CGSSpaceID = size_t
 
-enum CGSSpaceType: UInt32 {
+enum CGSSpaceType: Int32 {
     case user = 0
     case system = 2
     case fullscreen = 4
@@ -76,7 +76,7 @@ func CGSCopySpacesForWindows(
 func CGSSpaceGetType(
     _ cid: CGSConnectionID,
     _ sid: CGSSpaceID
-) -> CGSSpaceType
+) -> Int32
 
 // MARK: - CGSWindow Functions
 
